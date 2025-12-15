@@ -1,0 +1,67 @@
+Status Codes
+------------
+
+200 - Ok
+201 - Created
+400 - Bad requested
+404 - Not found
+500 - Internal server error
+
+
+JWT -> JWT token is used to give individual token that helps to acces and provide secure data
+morgan -> used to log events that taking place in the server and client
+multer -> For handle uploads
+
+
+// Backend
+-----------
+
+// Folders
+
+Workwave-backend/
+├─ Models/
+│  ├─ authModel.js
+│  ├─ employeeModel.js
+│  ├─ employerModel.js
+│  └─ jobModel.js
+├─ Controllers/
+│  ├─ authController.js
+│  ├─ employeeController.js
+│  ├─ employerController.js
+│  └─ jobController.js
+├─ Routes/
+│  ├─ authRoutes.js
+│  ├─ employeeRoutes.js
+│  ├─ employerRoutes.js
+│  └─ jobRoutes.js
+├─ Middlewares/
+│  ├─ authMiddleware.js
+│  └─ uploadMiddleware.js
+├─ config/
+│  └─ googleOAuth.js
+├─ uploads/
+│  └─ resumes/
+├─ .env
+└─ server.js
+
+
+
+//Models
+
+1.Auth model (For authntication)
+
+username,email,password,
+role - which role are they playing,
+provider - login using facebook,google,or local email and password login,
+googleId - it is an unique id that is assigned by google after "sign in using google" option
+timeStamps : used to create createdAt,updatedAt
+
+2.employee model 
+3.employer model
+4.job model
+5.Middlewares / authMiddleware
+
+
+//multer - > goto npmjs -> multer(read the doc)
+
+//usually frontend sends the data in the multipart not in the buffer or stream (can be created from buffer)
