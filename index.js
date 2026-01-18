@@ -1,5 +1,6 @@
 const express = require("express");
 const path = require("path");
+const session = require("express-session");
 const dotenv = require("dotenv");
 
 dotenv.config({ path: path.join(__dirname, "config", ".env") });
@@ -54,7 +55,6 @@ app.use(
     exposedHeaders: ["Content-Length"],
   })
 );
-
 
 // connectdb
 connectDB();

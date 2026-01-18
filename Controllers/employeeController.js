@@ -1,6 +1,4 @@
-const Auth = require("../Models/authModel.js");
 const Employee = require("../Models/employeeModel.js");
-const Employer = require("../Models/employerModel.js");
 
 const dotenv = require("dotenv");
 const path = require("path");
@@ -60,7 +58,7 @@ const jobPreferenceSchema = joi.object({
     .items(
       joi
         .string()
-        .valid("full-time", "part-time", "internship", "contract", "freelance")
+        .valid("full-time", "part-time", "internship", "contract", "freelance"),
     )
     .optional(),
   workAvailability: joi
@@ -68,7 +66,7 @@ const jobPreferenceSchema = joi.object({
     .items(
       joi
         .string()
-        .valid("monday-to-friday", "weekend-availability", "weekend-only")
+        .valid("monday-to-friday", "weekend-availability", "weekend-only"),
     )
     .required(),
   shiftPreference: joi
@@ -84,8 +82,8 @@ const jobPreferenceSchema = joi.object({
           "evening-shift",
           "fixed-shift",
           "us-shift",
-          "uk-shift"
-        )
+          "uk-shift",
+        ),
     )
     .required(),
   remote: joi.string().valid("remote", "hybrid", "onsite").optional(),
@@ -100,7 +98,7 @@ const skillSchema = joi.object({
 
 const certificationSchema = joi.object({
   name: joi.string().required(),
-  expireYear: joi.string().allow("").optional(),
+  expireYear: joi.date().allow(null).optional(),
   certificationId: joi.string().optional(),
 });
 
@@ -143,15 +141,14 @@ const setProfile = async (req, res) => {
     const employee = await Employee.findOneAndUpdate(
       { authId: userId },
       { $set: updatedFields },
-      { new: true, runValidators: true, upsert: true }
+      { new: true, runValidators: true, upsert: true },
     );
 
     if (!employee)
       return res.status(404).json({ message: "Employee profile nor found" });
 
-    const populated = await Employee.findOne({ authId: userId }).populate(
-      "authId",
-      "-password"
+    const populated = await Employee.findOne({ authId: userId }).select(
+      "location userName phone",
     );
 
     res.status(201).json({ employee: populated });
@@ -160,48 +157,122 @@ const setProfile = async (req, res) => {
   }
 };
 
-// Set Education
-const addEducation = async (req, res) => {
+const updateProfile = async (req, res) => {
   try {
-    const { degree, course } = req.body;
+    const { userName, phone, location } = req.body;
 
-    const { error } = educationSchema.validate(req.body);
-
-    if (error)
+    const { error } = profileSchema.validate(req.body);
+    if (error) {
       return res.status(400).json({ message: error.details[0].message });
+    }
 
     const userId = req.user._id || req.user.id;
 
-    const duplicates = await Employee.findOne({
-      authId: userId,
-      education: { $elemMatch: { degree, course } },
-    });
+    const updateData = {};
 
-    if (duplicates)
-      return res
-        .status(400)
-        .json({ message: "You have already add this to your profile" });
+    if (userName !== undefined) updateData.userName = userName;
+    if (phone !== undefined) updateData.phone = phone;
+
+    if (location) {
+      updateData.location = {
+        country: location.country ?? null,
+        street: location.street ?? null,
+        cityState: location.cityState ?? null,
+        area: location.area ?? null,
+        pincode: location.pincode ?? null,
+        relocation: location.relocation ?? false,
+      };
+    }
 
     const employee = await Employee.findOneAndUpdate(
       { authId: userId },
-      { $push: { education: { degree, course } } },
-      { new: true, runValidators: true }
-    ).select("-_id -authId");
+      { $set: updateData },
+      { new: true, runValidators: true },
+    ).select("userName phone location");
 
-    if (!employee)
+    if (!employee) {
       return res.status(404).json({ message: "Employee profile not found" });
+    }
 
-    res.status(201).json(employee);
+    res.status(200).json({ employee });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
 
+//Get education
+const getEducation = async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+
+    const employee = await Employee.findOne({ authId: userId }).select(
+      "education -_id",
+    );
+
+    if (!employee) return res.status(404).json({ message: "User Not Found" });
+
+    res.status(200).json(employee);
+  } catch (err) {
+    res.status(401).json({ message: err.message });
+  }
+};
+
+// Set Education
+const addEducation = async (req, res) => {
+  try {
+    const { error, value } = educationSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({
+        message: error.details[0].message,
+      });
+    }
+
+    let { degree, course } = value;
+
+    degree = degree.trim().toLowerCase();
+    course = course.trim().toLowerCase();
+
+    const userId = req.user._id || req.user.id;
+
+    const duplicate = await Employee.findOne({
+      authId: userId,
+      education: {
+        $elemMatch: { degree, course },
+      },
+    });
+
+    if (duplicate) {
+      return res.status(409).json({
+        message: "Education already exists",
+      });
+    }
+
+    const employee = await Employee.findOneAndUpdate(
+      { authId: userId },
+      { $push: { education: { degree, course } } },
+      { new: true },
+    );
+
+    if (!employee) {
+      return res.status(404).json({
+        message: "Employee profile not found",
+      });
+    }
+
+    res.status(201).json({
+      education: employee.education,
+    });
+  } catch (err) {
+    res.status(500).json({
+      message: "Failed to add education",
+    });
+  }
+};
 // UpdateEducation
 const editEducation = async (req, res) => {
   try {
-    const { degree, course } = req.body;
-
+    const { degree, course } = req.body || {};
+    0;
     const { id } = req.params;
 
     const { error } = educationSchema.validate(req.body);
@@ -235,7 +306,7 @@ const editEducation = async (req, res) => {
           "education.$.course": course,
         },
       },
-      { new: true, runValidators: true }
+      { new: true, runValidators: true },
     );
 
     if (!employee)
@@ -258,19 +329,36 @@ const deleteEducation = async (req, res) => {
     const employee = await Employee.findOneAndUpdate(
       { authId: userId, "education._id": id },
       { $pull: { education: { _id: id } } },
-      {new : true}
-    );
+      { new: true },
+    ).select("education -_id");
 
-    if(!employee) return res.status(404).json({message : "User Not Found"})
+    if (!employee) return res.status(404).json({ message: "User Not Found" });
 
-    res.status(200).json({message : "Education Deleted Successfully"})
-
+    res
+      .status(200)
+      .json({ message: "Education Deleted Successfully", employee });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
 
 // set Resume
+
+const getResume = async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const employeeResume = await Employee.findOne({ authId: userId }).select(
+      "resumeUrl -_id",
+    );
+
+    if (!employeeResume)
+      return res.status(404).json({ message: "User Not Found" });
+
+    res.status(200).json(employeeResume);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
 
 const setResume = async (req, res) => {
   try {
@@ -293,7 +381,7 @@ const setResume = async (req, res) => {
     const employee = await Employee.findOneAndUpdate(
       { authId: userId },
       { $set: { resumeUrl: filePath } },
-      { new: true }
+      { new: true },
     );
 
     if (!employee)
@@ -323,7 +411,7 @@ const deleteResume = async (req, res) => {
     const employee = await Employee.findOneAndUpdate(
       { authId: userId },
       { $unset: { resumeUrl: "" } },
-      { new: true }
+      { new: true },
     );
 
     if (!employee)
@@ -336,6 +424,22 @@ const deleteResume = async (req, res) => {
 };
 
 // Add and Update Work
+
+const getJobExperience = async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+
+    const employee = await Employee.findOne({ authId: userId }).select(
+      "experience -_id",
+    );
+
+    if (!employee) return res.status(404).json({ message: "User Not Found" });
+
+    res.status(200).json(employee);
+  } catch (err) {
+    res.status(401).json({ message: err.message });
+  }
+};
 
 const setJobExperience = async (req, res) => {
   try {
@@ -371,13 +475,13 @@ const setJobExperience = async (req, res) => {
           experience: { company, title, startDate, endDate, description },
         },
       },
-      { new: true, runValidators: true }
+      { new: true, runValidators: true },
     );
 
     if (!employee)
       return res.status(404).json({ message: "Employee profile not found" });
 
-    res.status(201).json(employee);
+    res.status(201).json({ experience: employee.experience });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -424,13 +528,13 @@ const editJobExperience = async (req, res) => {
           "experience.$.description": description,
         },
       },
-      { new: true, runValidators: true }
+      { new: true, runValidators: true },
     );
 
     if (!employee)
       return res.status(404).json({ message: "Employee Not Found" });
 
-    res.status(200).json(employee);
+    res.status(200).json({ experience: employee.experience });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -438,27 +542,47 @@ const editJobExperience = async (req, res) => {
 
 // Delete Job Experience
 
-const deleteJobExperience = async(req,res) =>{
-  try{
-    const userId = req.user._id || req.user.id
+const deleteJobExperience = async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
 
-    const {id} = req.params
+    const { id } = req.params;
 
     const employee = await Employee.findOneAndUpdate(
-      {authId : userId , "experience._id" : id},
-      {$pull : {experience : {_id : id}}},
-      {new : true}
-    )
+      { authId: userId, "experience._id": id },
+      { $pull: { experience: { _id: id } } },
+      { new: true },
+    );
 
-    if(!employee) return res.status(404).json({message : "Employee not found"}) 
+    if (!employee)
+      return res.status(404).json({ message: "Employee not found" });
 
-      res.status(200).json({message : "Job experience deleted successfully"})
-
+    res.status(200).json({
+      message: "Job experience deleted successfully",
+      experience: employee.experience,
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
-  catch(err){
-    res.status(500).json({message : err.message})
+};
+
+// Get skills
+
+const getSkills = async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+
+    const employee = await Employee.findOne({ authId: userId }).select(
+      "skills -_id",
+    );
+
+    if (!employee) return res.status(404).json({ message: "User Not Found" });
+
+    res.status(200).json(employee);
+  } catch (err) {
+    res.status(401).json({ message: err.message });
   }
-}
+};
 
 // Set Skills
 
@@ -488,8 +612,8 @@ const setSkills = async (req, res) => {
           skills: { name: name, experience: experience || "" },
         },
       },
-      { new: true, runValidators: true }
-    );
+      { new: true, runValidators: true },
+    ).select("skills -_id");
 
     if (!employee)
       return res.status(404).json({ message: "Employee not found" });
@@ -502,10 +626,9 @@ const setSkills = async (req, res) => {
 
 // editSkills
 
-
 const editSkills = async (req, res) => {
   try {
-    const { skillId, name, experience } = req.body;
+    const { name, experience } = req.body;
 
     const { id } = req.params;
 
@@ -530,7 +653,7 @@ const editSkills = async (req, res) => {
           "skills.$.experience": experience || "",
         },
       },
-      { new: true, runValidators: true }
+      { new: true, runValidators: true },
     );
 
     if (!employee)
@@ -541,7 +664,6 @@ const editSkills = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
-
 
 // Delete skills
 const deleteSkills = async (req, res) => {
@@ -554,23 +676,38 @@ const deleteSkills = async (req, res) => {
       { authId: userId, "skills._id": id },
       {
         $pull: {
-          skills : {_id : id}
+          skills: { _id: id },
         },
       },
-      { new: true}
-    );
+      { new: true },
+    ).select("skills -_id");
 
     if (!employee)
       return res.status(404).json({ message: "Skill entry not found" });
 
-    res.status(200).json({message : "Skill deleted successfully"});
-    
+    res.status(200).json({ message: "Skill deleted successfully", employee });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
 
 // certifications
+
+const getCertificates = async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+
+    const employee = await Employee.findOne({ authId: userId }).select(
+      "certifications -_id",
+    );
+
+    if (!employee) return res.status(404).json({ message: "User Not Found" });
+
+    res.status(200).json(employee);
+  } catch (err) {
+    res.status(401).json({ message: err.message });
+  }
+};
 
 const setCertifications = async (req, res) => {
   try {
@@ -607,13 +744,15 @@ const setCertifications = async (req, res) => {
           },
         },
       },
-      { new: true, runValidators: true }
+      { new: true, runValidators: true },
     );
 
     if (!employee)
       return res.status(404).json({ message: "Employee profile not found" });
 
-    res.status(201).json(employee);
+    res.status(200).json({
+      certifications: employee.certifications,
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -658,9 +797,11 @@ const editCertificate = async (req, res) => {
           "certifications.$.expireYear": expireYear,
         },
       },
-      { new: true, runValidators: true }
+      { new: true, runValidators: true },
     );
-    res.status(200).json(employee);
+    res.status(200).json({
+      certifications: employee.certifications,
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -671,8 +812,6 @@ const deleteCertificate = async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
 
-    console.log(req.params.id)
-
     const { id } = req.params;
 
     const employee = await Employee.findOneAndUpdate(
@@ -682,18 +821,40 @@ const deleteCertificate = async (req, res) => {
       },
       {
         $pull: {
-          certifications : {_id : id}
+          certifications: { _id: id },
         },
       },
-      { new: true}
-    );
+      { new: true },
+    ).select("certifications -_id");
 
-    if(!employee) return res.status(404).json({message : "Employee Not Found"})
+    if (!employee)
+      return res.status(404).json({ message: "Employee Not Found" });
 
-    res.status(200).json({message : "Certification Deleted Successfully"});
-
+    res.status(200).json({
+      certifications: employee.certifications,
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
+  }
+};
+
+// get job
+
+const getJobPreference = async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+
+    const employee = await Employee.findOne({ authId: userId }).select(
+      "jobPreferences -_id",
+    );
+
+    if (!employee) {
+      return res.status(404).json({ message: "User Not Found" });
+    }
+
+    res.status(200).json(employee);
+  } catch (err) {
+    res.status(401).json({ message: err.message });
   }
 };
 
@@ -713,12 +874,12 @@ const setJobPreferences = async (req, res) => {
     const userId = req.user._id || req.user.id;
 
     const { error } = jobPreferenceSchema.validate(req.body);
-
     if (error) {
-      return res.status(400).json({ message: error.details[0].message });
+      return res.status(400).json({
+        message: error.details[0].message,
+      });
     }
 
-    // Update employee's job preferences
     const employee = await Employee.findOneAndUpdate(
       { authId: userId },
       {
@@ -734,24 +895,28 @@ const setJobPreferences = async (req, res) => {
           },
         },
       },
-      { new: true, runValidators: true }
+      {
+        new: true,
+        runValidators: true,
+      },
     );
 
-    if (!employee)
+    if (!employee) {
       return res.status(404).json({ message: "Employee profile not found" });
+    }
 
-    res.status(200).json(employee);
+    res.status(200).json({ jobPreference: employee.jobPreferences });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
 
-// Edit Job preferences
+// Edit job preferences
 const editJobPreferences = async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
+
     const {
-      preferenceId,
       jobTitle,
       preferredLocation,
       expectedSalary,
@@ -765,7 +930,9 @@ const editJobPreferences = async (req, res) => {
 
     const { error } = jobPreferenceSchema.validate(req.body);
     if (error) {
-      return res.status(400).json({ message: error.details[0].message });
+      return res.status(400).json({
+        message: error.details[0].message,
+      });
     }
 
     const employee = await Employee.findOneAndUpdate(
@@ -781,13 +948,17 @@ const editJobPreferences = async (req, res) => {
           "jobPreferences.$.remote": remote || "onsite",
         },
       },
-      { new: true, runValidators: true }
+      {
+        new: true,
+        runValidators: true,
+      },
     );
 
-    if (!employee)
+    if (!employee) {
       return res.status(404).json({ message: "Employee profile not found" });
+    }
 
-    res.status(200).json(employee);
+    res.status(200).json({ jobPreference: employee.jobPreferences });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -797,35 +968,53 @@ const editJobPreferences = async (req, res) => {
 const deleteJobPreferences = async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
-
     const { id } = req.params;
 
     const employee = await Employee.findOneAndUpdate(
       { authId: userId, "jobPreferences._id": id },
       {
         $pull: {
-          jobPreferences : {_id : id}
+          jobPreferences: { _id: id },
         },
       },
-      { new: true}
+      { new: true },
     );
 
-    if (!employee)
+    if (!employee) {
       return res.status(404).json({ message: "Employee profile not found" });
-
-    res.status(200).json({message : "Job Preferences delete successfully"});
+    }
+    res.status(200).json({
+      message: "Job Preferences delete successfully",
+      jobPreference: employee.jobPreferences,
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
 
-// setLanguage
+// getLanguage
+
+const getLanguage = async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+
+    const employee = await Employee.findOne({ authId: userId }).select(
+      "languages -_id",
+    );
+
+    if (!employee) return res.status(404).json({ message: "User Not Found" });
+
+    res.status(200).json(employee);
+  } catch (err) {
+    res.status(401).json({ message: err.message });
+  }
+};
 
 const setLanguage = async (req, res) => {
   try {
-    const { name, proficiency } = req.body;
-
     const userId = req.user._id || req.user.id;
+
+    const { name, proficiency } = req.body;
 
     const { error } = languageSchema.validate(req.body);
 
@@ -855,13 +1044,14 @@ const setLanguage = async (req, res) => {
             proficiency,
           },
         },
-      }
+      },
+      { new: true, runValidators: true },
     );
 
     if (!employee)
       return res.status(404).json({ message: "Employee profile not found" });
 
-    res.status(201).json(employee);
+    res.status(201).json({ languages: employee.languages });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -904,13 +1094,14 @@ const editLanguage = async (req, res) => {
           "languages.$.name": name,
           "languages.$.proficiency": proficiency,
         },
-      }
+      },
+      { new: true, runValidators: true },
     );
 
     if (!employee)
       return res.status(404).json({ message: "Employee profile not found" });
 
-    res.status(200).json(employee);
+    res.status(200).json({ languages: employee.languages });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -927,16 +1118,19 @@ const deleteLanguage = async (req, res) => {
       { authId: userId, "languages._id": id },
       {
         $pull: {
-          languages : {_id : id}
+          languages: { _id: id },
         },
-      }
+      },
+      { new: true },
     );
 
     if (!employee)
       return res.status(404).json({ message: "Employee profile not found" });
 
-    res.status(200).json({message : "Language deleted successfully"});
-
+    res.status(200).json({
+      message: "Language deleted successfully",
+      languages: employee.languages,
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -947,10 +1141,12 @@ const getProfile = async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
 
-    const employee = await Employee.findOne({ authId: userId }).populate(
-      "authId",
-      "email role provider"
-    );
+    const employee = await Employee.findOne({ authId: userId })
+      .populate("authId", "email role provider")
+      .populate({
+        path: "appliedJobs",
+        select: "title location salaryRange type employerDetails createdAt",
+      });
     if (!employee) return res.status(404).json({ message: "User Not Found" });
     res.status(200).json(employee);
   } catch (err) {
@@ -958,27 +1154,58 @@ const getProfile = async (req, res) => {
   }
 };
 
+const getAppliedJobs = async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+
+    const employee = await Employee.findOne(
+      { authId: userId },
+      { appliedJobs: 1, _id: 0 },
+    ).populate({
+      path: "appliedJobs",
+      select: "title location salaryRange type jobKey createdAt",
+    });
+
+    if (!employee) {
+      return res.status(404).json({ message: "User Not Found" });
+    }
+
+    res.status(200).json(employee.appliedJobs);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
 module.exports = {
+  updateProfile,
   getProfile,
   setProfile,
   addEducation,
+  getEducation,
   editEducation,
   deleteEducation,
+  getJobExperience,
   setJobExperience,
   editJobExperience,
   deleteJobExperience,
+  getSkills,
   setSkills,
   editSkills,
   deleteSkills,
+  getCertificates,
   setCertifications,
   editCertificate,
   deleteCertificate,
+  getJobPreference,
   setJobPreferences,
   editJobPreferences,
   deleteJobPreferences,
+  getLanguage,
   setLanguage,
   editLanguage,
   deleteLanguage,
+  getResume,
   setResume,
   deleteResume,
+  getAppliedJobs,
 };

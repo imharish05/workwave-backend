@@ -1,55 +1,60 @@
-const path = require("path")
-const dotenv = require("dotenv")
-const Auth = require("./Models/authModel.js")
-const Employee = require("./Models/employeeModel.js")
+const path = require("path");
+const dotenv = require("dotenv");
+const Auth = require("./Models/authModel.js");
+const Employee = require("./Models/employeeModel.js");
 
-dotenv.config({path : path.join(__dirname,"config",".env")})
+dotenv.config({ path: path.join(__dirname, "config", ".env") });
 
-const passport = require("passport")
-const {Strategy : googleStrategy} = require("passport-google-oauth20")
+const passport = require("passport");
+const { Strategy: googleStrategy } = require("passport-google-oauth20");
 
-passport.use(new googleStrategy({
-    clientID : process.env.CLIENT_ID,
-    clientSecret : process.env.CLIENT_SECRET,
-    callbackURL : process.env.CLIENT_URL
-},
-async(accessToken,refreshToken,profile,done)=>{
-try{
+passport.use(
+  new googleStrategy(
+    {
+      clientID: process.env.CLIENT_ID,
+      clientSecret: process.env.CLIENT_SECRET,
+      callbackURL: process.env.GOOGLE_CALLBACK_URL,
+    },
+    async (accessToken, refreshToken, profile, done) => {
+      try {
+        //Getting details from google
+        const googleId = profile.id;
+        const email = profile.emails[0].value;
+        const userName = profile.displayName;
 
-    //Getting details from google
-    const googleId = profile.id
-    const email = profile.emails[0].value
-    const userName = profile.displayName
+        // Checking user is already exist
+        let user = await Auth.findOne({ googleId });
 
-    // Checking user is already exist
-    let user = await Auth.findOne({googleId})
+        // If not by googleId then by email
+        if (!user) {
+          user = await Auth.findOne({ email });
+        }
 
-    // If not by googleId then by email
-    if(!user){
-        user = await Auth.findOne({email})
-    }
-
-    // If there is no user we are creating one in Auth
-    if(!user){
-        user = await Auth.create({
+        // If there is no user we are creating one in Auth
+        if (!user) {
+          user = await Auth.create({
             userName,
             email,
             googleId,
-            password : null,
-            provider : "google"
-        })
-    }
+            role : null,
+            password: null,
+            provider: "google",
+          });
+        }
 
-    if(user.role  === "employee"){
-        await Employee.create({
-            authId : user._id
-        })
-    }
-    return done(null,user)
-}
-catch(err){
-    return done(err,null)
-}
-}))
+        if (user.role === "employee") {
+          const exists = await Employee.findOne({ authId: user._id });
+          if (!exists) {
+            await Employee.create({ authId: user._id });
+          }
+        }
 
-module.exports = passport
+        return done(null, user);
+      } catch (err) {
+        return done(err, null);
+      }
+    }
+  )
+);
+
+module.exports = passport;

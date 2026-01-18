@@ -5,7 +5,7 @@
         password : {type:String},
         provider : {type : String,default : "local"},
         googleId : String,
-        role : {type :String, enum : ["employee","employer"],default : "employee"}
+        role : {type :String, enum : ["employee","employer"]}
     },{timestamps : true})
 
     const Auth = mongoose.model("Auth",authSchema)

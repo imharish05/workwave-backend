@@ -74,7 +74,16 @@ const employeeSchema = new mongoose.Schema(
         expireYear: String,
       },
     ],
-    languages: [{ name: String, proficiency: {type : String , enum :["beginner","intermediate","expert","fluent","native"]}}],
+    languages: [
+      {
+        name: String,
+        proficiency: {
+          type: String,
+          enum: ["beginner", "intermediate", "expert", "fluent", "native"],
+        },
+      },
+    ],
+    appliedJobs: [{ type: mongoose.Schema.Types.ObjectId, ref: "Job" }],
   },
   { timestamps: true }
 );

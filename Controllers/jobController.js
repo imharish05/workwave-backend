@@ -1,34 +1,57 @@
-const Job = require("../Models/jobModel.js");
+const Job = require("../Models/jobModel");
+const Employer = require("../Models/employerModel");
+const Employee = require("../Models/employeeModel");
+const Joi = require("joi");
 
-const Employer = require("../Models/employerModel.js");
-
-const joi = require("joi");
-
-const jobValidation = joi.object({
-  title: joi.string().trim().required(),
-  description: joi.string().allow("").optional(),
-  type: joi.string().valid("Full Time", "Part Time", "Internship").optional(),
-  experience: joi.number().min(0).optional(),
-  location: joi.string().allow("").optional(),
-  salaryRange: joi.string().allow("").optional(),
-  skills: joi.array().items(joi.string().trim()).optional(),
-  applicants: joi.array().items(joi.string().hex().length(24)).optional(),
+const jobValidation = Joi.object({
+  title: Joi.string().trim().required(),
+  description: Joi.string().allow("").optional(),
+  type: Joi.array()
+    .items(
+      Joi.string().valid("full-time", "part-time", "internship", "contract"),
+    )
+    .min(1)
+    .required(),
+  experience: Joi.string().optional(),
+  location: Joi.string().allow("").optional(),
+  salaryRange: Joi.string().allow("").optional(),
+  skills: Joi.array().items(Joi.string().trim()).optional(),
 });
 
-const updateJobValidation = joi.object({
-  title: joi.string().trim().optional(),
-  type: joi.string().optional(),
-  description: joi.string().optional(),
-  location: joi.string().optional(),
-  salaryRange: joi.string().optional(),
-  skills: joi.array().items(joi.string().trim()).optional(),
-  applicants: joi.array().items(joi.string().hex().length(24)).optional(),
-  experience: joi.number().min(0).optional(),
+const updateJobValidation = Joi.object({
+  title: Joi.string().trim().required(),
+  description: Joi.string().allow("").optional(),
+  type: Joi.array()
+    .items(
+      Joi.string().valid("full-time", "part-time", "internship", "contract"),
+    )
+    .min(1)
+    .required(),
+  experience: Joi.string().optional(),
+  location: Joi.string().allow("").optional(),
+  salaryRange: Joi.string().allow("").optional(),
+  skills: Joi.array().items(Joi.string().trim()).optional(),
 });
+
+const getFullEmployer = async (authId) => {
+  return Employer.findOne({ authId }).populate({
+    path: "jobPosted",
+    options: { sort: { createdAt: -1 } },
+  });
+};
 
 const createJob = async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
+
+    const { error } = jobValidation.validate(req.body);
+    if (error)
+      return res.status(400).json({ message: error.details[0].message });
+
+    const employer = await Employer.findOne({ authId: userId });
+    if (!employer)
+      return res.status(404).json({ message: "Employer profile not found" });
+
     const {
       title,
       type,
@@ -36,94 +59,45 @@ const createJob = async (req, res) => {
       location,
       salaryRange,
       skills,
-      applicants,
       experience,
     } = req.body;
 
-    const { error } = jobValidation.validate(req.body);
+    const duplicate = await Job.findOne({
+      employerId: employer._id,
+      title: title.trim().toLowerCase(),
+    });
 
-    if (error)
-      return res.status(400).json({ message: error.details[0].message });
-
-    const employer = await Employer.findOne({ authId: userId });
-
-    if (!employer)
-      return res.status(400).json({ message: "Employer profile not found" });
+    if (duplicate)
+      return res.status(400).json({ message: "Job already exists" });
 
     const slug = title
       .toLowerCase()
-      .trim()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "")
-      .slice(0, 50);
+      .slice(0, 40);
 
-    const jobKeyTitle = `${slug}-${Date.now().toString(36)}`;
+    const jobKey = `${slug}-${Date.now().toString(36)}`;
 
-    const duplicates = await Job.findOne({
-      employerId: employer._id,
-      title: title,
-    });
-
-    if (duplicates)
-      return res
-        .status(400)
-        .json({ message: "A job with this title already exists" });
-
-    const newJob = await Job.create({
-      title,
+    const job = await Job.create({
+      title: title.trim().toLowerCase(),
       type,
       description,
       location,
       salaryRange: salaryRange || "Not Disclosed",
       skills: skills || [],
-      applicants: applicants || [],
-      experience: experience ?? 0,
+      experience,
       employerId: employer._id,
-      employerDetails: {
-        companyName: employer.companyName,
-        hrName: employer.hrName,
-        hrEmail: employer.hrEmail,
-        companySize: employer.companySize,
-        industry: employer.industry,
-      },
-      jobKey: jobKeyTitle,
+      jobKey,
     });
 
-    if (!newJob) return res.status(400).json({ message: "Job not Found" });
-
-    await Employer.findOneAndUpdate(
-      { authId: userId },
-      {
-        $addToSet: { jobPosted: newJob._id },
-      },
-      {
-        upsert: true,
-        new: true,
-        runValidators: true,
-      }
+    await Employer.updateOne(
+      { _id: employer._id },
+      { $addToSet: { jobPosted: job._id } },
     );
 
-    res.status(201).json({
-      job: {
-        title: newJob.title,
-        description: newJob.description,
-        location: newJob.location,
-        salaryRange: newJob.salaryRange,
-        skills: newJob.skills,
-        applicants: newJob.applicants,
-        experience: newJob.experience,
-        jobKey: newJob.jobKey,
-        employerDetails: {
-          companyName: employer.companyName,
-          hrName: employer.hrName,
-          hrEmail: employer.hrEmail,
-          companySize: employer.companySize,
-          industry: employer.industry,
-        },
-      },
-    });
+    const fullEmployer = await getFullEmployer(userId);
+
+    res.status(201).json({ employer: fullEmployer });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -134,58 +108,38 @@ const createJob = async (req, res) => {
 const updateJob = async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
-
-    const {
-      title,
-      type,
-      description,
-      location,
-      salaryRange,
-      skills,
-      applicants,
-      experience,
-    } = req.body;
-
     const { id } = req.params;
 
     const { error } = updateJobValidation.validate(req.body);
-
     if (error)
       return res.status(400).json({ message: error.details[0].message });
 
     const employer = await Employer.findOne({ authId: userId });
-
     if (!employer)
-      return res.status(404).json({ message: "Employer Not Found" });
+      return res.status(404).json({ message: "Employer not found" });
 
-    const duplicate = await Job.findOne({
-      employerId: employer._id,
-      _id: { $ne: id },
-      title: title,
-    });
+    if (req.body.title) {
+      const duplicate = await Job.findOne({
+        employerId: employer._id,
+        _id: { $ne: id },
+        title: req.body.title.trim().toLowerCase(),
+      });
 
-    if (duplicate)
-      return res.status(400).json({ message: "Job already present" });
+      if (duplicate)
+        return res.status(400).json({ message: "Duplicate job title" });
+    }
 
     const job = await Job.findOneAndUpdate(
-      { employerId: employer._id, _id: id },
-      {
-        $set: {
-          title,
-          type,
-          description,
-          location,
-          salaryRange,
-          skills,
-          applicants,
-          experience,
-        },
-      },
-      { new: true, runValidators: true }
+      { _id: id, employerId: employer._id },
+      { $set: req.body },
+      { new: true },
     );
 
-    if (!job) return res.status(404).json({ message: "Job not Found" });
-    res.status(200).json(job);
+    if (!job) return res.status(404).json({ message: "Job not found" });
+
+    const fullEmployer = await getFullEmployer(userId);
+
+    res.status(200).json({ employer: fullEmployer });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -193,49 +147,62 @@ const updateJob = async (req, res) => {
 
 const getAllJobs = async (req, res) => {
   try {
-    const jobs = await Job.find();
-    if (jobs.length === 0) return res.status(200).json([]);
+    const jobs = await Job.find({ isActive: true })
+      .populate({
+        path: "employerId",
+        select: "companyName companyLogo location website",
+      })
+      .sort({ createdAt: -1 })
+      .select(
+        "title description type experience location salaryRange skills applicants jobKey isActive",
+      );
 
-    res.status(200).json(jobs);
+    const response = jobs.map((job) => ({
+      ...job.toObject(),
+      applicantsCount: job.applicants.length,
+      applicants: undefined,
+    }));
+
+    res.status(200).json(response);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
 
-const getJobById = async (req, res) => {
+const getJobByKey = async (req, res) => {
   try {
     const job = await Job.findOne({ jobKey: req.params.id });
-
-    if (!job) return res.status(404).json({ message: "Job Not Found" });
-
+    if (!job) return res.status(404).json({ message: "Job not found" });
     res.status(200).json(job);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
 
-const deleteById = async (req, res) => {
+const deleteJob = async (req, res) => {
   try {
-    const userId = req.user_id || req.user.id;
-
+    const userId = req.user._id || req.user.id;
     const { id } = req.params;
 
-    const employer = await Employer.findOneAndUpdate(
-      { authId: userId },
-      { $pull: { jobPosted: { id } } }
+    const employer = await Employer.findOne({ authId: userId });
+    if (!employer)
+      return res.status(404).json({ message: "Employer not found" });
+
+    const job = await Job.findOneAndDelete({
+      _id: id,
+      employerId: employer._id,
+    });
+
+    if (!job) return res.status(404).json({ message: "Job not found" });
+
+    await Employer.updateOne(
+      { _id: employer._id },
+      { $pull: { jobPosted: id } },
     );
 
-    if (!employer)
-      return res
-        .status(404)
-        .json({ message: "Job is Not listed in the employer profile" });
+    const fullEmployer = await getFullEmployer(userId);
 
-    const employerJobById = await Job.findByIdAndDelete({ _id: id });
-
-    if (!employerJobById)
-      return res.status(404).json({ message: "Job not found" });
-
-    res.status(200).json({ message: "Job deleted successfully" });
+    res.status(200).json({ employer: fullEmployer });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -243,15 +210,61 @@ const deleteById = async (req, res) => {
 
 const getJobByEmployer = async (req, res) => {
   try {
-    const employerId = req.params.id;
+    const userId = req.user._id || req.user.id;
 
-    const jobs = await Job.find({
-      employerId: employerId,
-    }).select("-employerDetails -employerId");
+    const employer = await Employer.findOne({ authId: userId });
+    if (!employer) {
+      return res.status(404).json({ message: "Employer not found" });
+    }
 
-    if (jobs.length === 0) return res.status(200).json([]);
+    const jobs = await Job.find({ employerId: employer._id })
+      .select("-employerId -__v")
+      .populate({
+        path: "applicants",
+        select: "-_id -appliedJobs -__v",
+        populate: {
+          path: "authId",
+          select: "email -_id",
+        },
+      })
+      .sort({ createdAt: -1 });
 
     res.status(200).json(jobs);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+
+const applyJob = async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+
+    const { id } = req.params;
+
+    const employee = await Employee.findOne({ authId: userId });
+    if (!employee)
+      return res.status(404).json({ message: "Employee not found" });
+
+    if (employee.appliedJobs.includes(id)) {
+      return res
+        .status(400)
+        .json({ message: "You have already applied to this job" });
+    }
+
+    const job = await Job.findById(id);
+    if (!job) return res.status(404).json({ message: "Job not found" });
+
+    await Job.findByIdAndUpdate(id, {
+      $addToSet: { applicants: employee._id },
+    });
+
+    await Employee.findOneAndUpdate(
+      { authId: userId },
+      { $addToSet: { appliedJobs: id } },
+    );
+
+    res.status(200).json({ message: "Applied successfully" });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -261,7 +274,8 @@ module.exports = {
   createJob,
   updateJob,
   getAllJobs,
-  getJobById,
-  deleteById,
+  getJobByKey,
+  deleteJob,
+  applyJob,
   getJobByEmployer,
 };
