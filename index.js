@@ -33,28 +33,22 @@ const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:5174",
   "https://imharish05.github.io",
+  "https://workwave.netlify.app"
 ];
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) return callback(null, true);
-      else {
-        return callback(new Error("CORS Blocked : Origin not allowed"));
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("CORS Blocked: Origin not allowed"));
       }
     },
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
     credentials: true,
-    allowedHeaders: [
-      "Content-Type",
-      "Authorization",
-      "Accept",
-      "X-Requested-With",
-    ],
-    exposedHeaders: ["Content-Length"],
   })
 );
+
 
 // connectdb
 connectDB();
