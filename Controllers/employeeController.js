@@ -1309,6 +1309,7 @@ const getProfile = async (req, res) => {
   }
 };
 
+
 const getAppliedJobs = async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
