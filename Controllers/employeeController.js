@@ -572,11 +572,12 @@ const viewResume = async (req, res) => {
 const getResume = async (req, res) => {
   try {
     const userId = req.user?._id || req.user?.id;
+
     const employee = await Employee.findOne({ authId: userId }).select(
       "resume -_id",
     );
 
-    if (!employee || !employee.resume?.url) {
+    if (!employee) {
       return res.status(404).json({ message: "Resume not found" });
     }
 
