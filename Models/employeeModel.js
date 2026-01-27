@@ -24,7 +24,19 @@ const employeeSchema = new mongoose.Schema(
       },
     ],
     skills: [{ name: String, experience: String }],
-    resumeUrl: String,
+    resume: {
+      filename: String,
+      url: String,
+      publicId: String,
+      resourceType: {
+        type: String,
+        default: "raw", // Important for PDFs/documents
+      },
+      uploadDate: {
+        type: Date,
+        default: Date.now,
+      },
+    },
     jobPreferences: [
       {
         jobTitle: [String],
@@ -85,7 +97,7 @@ const employeeSchema = new mongoose.Schema(
     ],
     appliedJobs: [{ type: mongoose.Schema.Types.ObjectId, ref: "Job" }],
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 const Employee = mongoose.model("Employee", employeeSchema);

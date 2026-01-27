@@ -1,6 +1,7 @@
 const express = require("express");
 
 const router = express.Router();
+const resumeUpload = require("../Middlewares/resumeUpload.js");
 
 const {
   getProfile,
@@ -31,9 +32,12 @@ const {
   editLanguage,
   deleteLanguage,
 
-  setResume,
-  deleteResume,
   getResume,
+  setResume,
+  viewResume,
+  downloadResume,
+  deleteResume,
+
   getSkills,
   getCertificates,
   getJobPreference,
@@ -41,11 +45,9 @@ const {
   getJobExperience,
   updateProfile,
   getAppliedJobs,
-
 } = require("../Controllers/employeeController");
 
 const protect = require("../Middlewares/authMiddleware.js");
-const { upload } = require("../Middlewares/uploadMiddleware.js");
 
 // Profile
 router.get("/profile", protect, getProfile);
@@ -57,7 +59,6 @@ router.get("/education", protect, getEducation);
 router.post("/education", protect, addEducation);
 router.put("/education/:id", protect, editEducation);
 router.delete("/education/:id", protect, deleteEducation);
-
 
 // experience
 router.get("/experience", protect, getJobExperience);
@@ -90,13 +91,11 @@ router.put("/language/:id", protect, editLanguage);
 router.delete("/language/:id", protect, deleteLanguage);
 
 // Resume
-router.get("/resume", protect, getResume);
-router.post("/resume", protect, upload.single("resume"), setResume);
+router.get("/resume/view", protect, viewResume);
+router.get("/resume/download", protect, downloadResume);
+router.get("/resume", protect, getResume);  // This must come AFTER /resume/view and /resume/download
+router.post("/resume", protect, resumeUpload.single("resume"), setResume);
 router.delete("/resume", protect, deleteResume);
-
-
-// AppliedJobs
-
 router.get("/applied-jobs", protect, getAppliedJobs);
 
 module.exports = router;

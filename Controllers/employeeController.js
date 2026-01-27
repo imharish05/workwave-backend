@@ -1,4 +1,6 @@
 const Employee = require("../Models/employeeModel.js");
+const cloudinary = require("cloudinary").v2;
+const axios = require("axios");
 
 const dotenv = require("dotenv");
 const path = require("path");
@@ -342,87 +344,277 @@ const deleteEducation = async (req, res) => {
   }
 };
 
-// set Resume
-
-const getResume = async (req, res) => {
-  try {
-    const userId = req.user._id || req.user.id;
-    const employeeResume = await Employee.findOne({ authId: userId }).select(
-      "resumeUrl -_id",
-    );
-
-    if (!employeeResume)
-      return res.status(404).json({ message: "User Not Found" });
-
-    res.status(200).json(employeeResume);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-};
+// Upload Resume - WITH DETAILED ERROR LOGGING
 
 const setResume = async (req, res) => {
   try {
-    const userId = req.user._id || req.user.id;
+    const userId = req.user?._id || req.user?.id;
+    if (!userId) {
+      console.error("ERROR: No user ID in request");
+      return res.status(401).json({ message: "User not authenticated" });
+    }
 
-    if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+    // Check 2: File in request
+    if (!req.file) {
+      console.error("ERROR: No file in request");
+      console.log("req.body:", req.body);
+      console.log("req.files:", req.files);
+      return res.status(400).json({ message: "No file uploaded" });
+    }
 
-    const filePath = `${process.env.BASE_URL}/uploads/resumes/${req.file.filename}`;
+    // Check 3: Cloudinary upload result
+    if (!req.file.path) {
+      console.error("ERROR: No Cloudinary path in file object");
+      console.log("File object:", JSON.stringify(req.file, null, 2));
+      return res.status(500).json({
+        message: "Cloudinary upload failed - no path returned",
+        details: "File was received but Cloudinary did not return a URL",
+      });
+    }
 
-    const employeeId = await Employee.findOne({ authId: userId });
+    // Check 4: Validate Cloudinary URL format
+    if (!req.file.path.includes("cloudinary.com")) {
+      return res.status(500).json({
+        message: "Invalid Cloudinary URL",
+        url: req.file.path,
+      });
+    }
 
-    if (employeeId.resumeUrl) {
-      const fileName = path.basename(employeeId.resumeUrl);
-      const filePath = path.join(__dirname, "../uploads/resumes", fileName);
-      if (fs.existsSync(filePath)) {
-        await fs.unlinkSync(filePath);
+    const employee = await Employee.findOne({ authId: userId });
+
+    if (!employee) {
+      console.error("ERROR: Employee not found in database");
+      return res.status(404).json({ message: "Employee profile not found" });
+    }
+
+    // Check 6: Delete old resume if exists
+    if (employee.resume?.publicId) {
+      console.log("Deleting old resume:", employee.resume.publicId);
+      try {
+        const deleteResult = await cloudinary.uploader.destroy(
+          employee.resume.publicId,
+          { resource_type: "raw", invalidate: true },
+        );
+        console.log("✓ Old resume deleted:", deleteResult.result);
+      } catch (delError) {
+        console.warn("Warning: Could not delete old resume:", delError.message);
+        // Continue anyway - this is not critical
       }
     }
 
-    const employee = await Employee.findOneAndUpdate(
-      { authId: userId },
-      { $set: { resumeUrl: filePath } },
-      { new: true },
-    );
+    // Check 7: Save new resume to database
+    employee.resume = {
+      filename: req.file.originalname,
+      url: req.file.path,
+      publicId: req.file.filename,
+      resourceType: "raw",
+      uploadDate: new Date(),
+    };
 
-    if (!employee)
-      return res.status(404).json({ message: "Employee not found" });
+    await employee.save();
 
-    res.status(200).json({ filePath });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-};
-
-// DELETE RESUME
-const deleteResume = async (req, res) => {
-  try {
-    const userId = req.user._id || req.user.id;
-
-    const employeeId = await Employee.findOne({ authId: userId });
-
-    const fileName = path.basename(employeeId.resumeUrl);
-
-    const filePath = path.join(__dirname, "../uploads/resumes", fileName);
-
-    if (fs.existsSync(filePath)) {
-      await fs.unlinkSync(filePath);
+    try {
+      const testResponse = await axios.head(employee.resume.url, {
+        timeout: 5000,
+      });
+      console.log("✓ URL is accessible, status:", testResponse.status);
+    } catch (urlError) {
+      console.error("WARNING: URL test failed:", urlError.message);
+      console.log("URL may not be immediately accessible, but continuing...");
     }
 
-    const employee = await Employee.findOneAndUpdate(
-      { authId: userId },
-      { $unset: { resumeUrl: "" } },
-      { new: true },
+    console.log("=== RESUME UPLOAD COMPLETE ===\n");
+
+    res.status(200).json({
+      filename: employee.resume.filename,
+      url: employee.resume.url,
+      uploadDate: employee.resume.uploadDate,
+    });
+  } catch (err) {
+    // Check specific error types
+    if (err.name === "ValidationError") {
+      console.error("MongoDB Validation Error:", err.errors);
+      return res.status(400).json({
+        message: "Database validation error",
+        details: Object.values(err.errors).map((e) => e.message),
+      });
+    }
+
+    if (err.name === "MongoError" || err.name === "MongoServerError") {
+      console.error("MongoDB Error:", err.message);
+      return res.status(500).json({
+        message: "Database error",
+        details: err.message,
+      });
+    }
+
+    // Generic error response
+    res.status(500).json({
+      message: "Failed to upload resume",
+      error: err.message,
+      type: err.constructor.name,
+    });
+  }
+};
+
+// Download Resume - Buffer Method with Error Handling
+const downloadResume = async (req, res) => {
+  try {
+    const userId = req.user?._id || req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ message: "User not authenticated" });
+    }
+
+    const employee = await Employee.findOne({ authId: userId }).select(
+      "resume -_id",
     );
 
-    if (!employee)
-      return res.status(404).json({ message: "Employee not found" });
+    if (!employee || !employee.resume?.url) {
+      console.log("No resume found for user:", userId);
+      return res.status(404).json({ message: "Resume not found" });
+    }
 
-    res.status(200).json({ message: "File deleted successfully" });
+    // Fetch from Cloudinary
+    const response = await axios({
+      method: "GET",
+      url: employee.resume.url,
+      responseType: "stream",
+      timeout: 30000, // 30 second timeout
+    });
+
+    const contentType =
+      response.headers["content-type"] || "application/octet-stream";
+
+    // Set response headers
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${encodeURIComponent(employee.resume.filename)}"`,
+    );
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Cache-Control", "no-cache");
+
+    if (response.headers["content-length"]) {
+      res.setHeader("Content-Length", response.headers["content-length"]);
+    }
+
+    response.data.on("error", (err) => {
+      console.error("Stream error:", err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Stream error occurred" });
+      }
+    });
+
+    // Pipe the stream to response
+    response.data.pipe(res);
+  } catch (error) {
+    console.error("\n=== DOWNLOAD ERROR ===");
+    console.error("Error:", error.message);
+
+    if (error.response) {
+      console.error("Cloudinary response status:", error.response.status);
+      console.error("Cloudinary response data:", error.response.data);
+    }
+
+    if (error.code === "ECONNABORTED") {
+      console.error("Request timeout");
+    }
+
+    if (!res.headersSent) {
+      res.status(500).json({
+        error: "Failed to download file",
+        message: error.message,
+        code: error.code,
+      });
+    }
+  }
+};
+
+// View Resume
+const viewResume = async (req, res) => {
+  try {
+    const userId = req.user?._id || req.user?.id;
+    const employee = await Employee.findOne({ authId: userId }).select(
+      "resume -_id",
+    );
+
+    if (!employee || !employee.resume?.url) {
+      return res.status(404).json({ message: "Resume not found" });
+    }
+
+    const response = await axios({
+      method: "GET",
+      url: employee.resume.url,
+      responseType: "arraybuffer",
+      timeout: 60000,
+    });
+
+    const buffer = Buffer.from(response.data);
+    const contentType = response.headers["content-type"] || "application/pdf";
+
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Length", buffer.length);
+    res.setHeader(
+      "Content-Disposition",
+      `inline; filename="${encodeURIComponent(employee.resume.filename)}"`,
+    );
+
+    res.send(buffer);
+  } catch (error) {
+    console.error("View error:", error.message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Failed to view file" });
+    }
+  }
+};
+
+// Get Resume metadata
+const getResume = async (req, res) => {
+  try {
+    const userId = req.user?._id || req.user?.id;
+    const employee = await Employee.findOne({ authId: userId }).select(
+      "resume -_id",
+    );
+
+    if (!employee || !employee.resume?.url) {
+      return res.status(404).json({ message: "Resume not found" });
+    }
+
+    res.status(200).json(employee.resume);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
 
+// Delete Resume
+const deleteResume = async (req, res) => {
+  try {
+    const userId = req.user?._id || req.user?.id;
+    const employee = await Employee.findOne({ authId: userId });
+
+    if (!employee || !employee.resume?.publicId) {
+      return res.status(404).json({ message: "Resume not found" });
+    }
+
+    console.log("Deleting resume:", employee.resume.publicId);
+
+    // Delete from Cloudinary
+    await cloudinary.uploader.destroy(employee.resume.publicId, {
+      resource_type: "raw",
+      invalidate: true,
+    });
+
+    // Remove from database
+    employee.resume = undefined;
+    await employee.save();
+
+    console.log("Resume deleted successfully");
+    res.status(200).json({ message: "Resume deleted successfully" });
+  } catch (err) {
+    console.error("Delete error:", err);
+    res.status(500).json({ message: err.message });
+  }
+};
 // Add and Update Work
 
 const getJobExperience = async (req, res) => {
@@ -1206,6 +1398,8 @@ module.exports = {
   deleteLanguage,
   getResume,
   setResume,
+  viewResume,
+  downloadResume,
   deleteResume,
   getAppliedJobs,
 };
