@@ -6,6 +6,9 @@ const path = require("path");
 
 dotenv.config({path : path.join(__dirname,"..","config",".env")})
 
+console.log(process.env.SECRET);
+
+
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
@@ -25,7 +28,7 @@ const storage = new CloudinaryStorage({
   },
 });
 
-const resumeUpload = multer({ 
+const uploadResume = multer({ 
   storage: storage,
   limits: {
     fileSize: 5 * 1024 * 1024, // 5MB limit
@@ -45,4 +48,4 @@ const resumeUpload = multer({
   }
 });
 
-module.exports = resumeUpload;
+module.exports = uploadResume;

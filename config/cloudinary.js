@@ -5,9 +5,6 @@ const path = require("path")
 
 dotenv.config({ path: path.join(__dirname,"config",".env") });
 
-console.log(process.env.CLOUDINARY_NAME);
-
-
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,

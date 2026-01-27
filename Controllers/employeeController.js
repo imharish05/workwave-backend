@@ -1,5 +1,5 @@
 const Employee = require("../Models/employeeModel.js");
-const cloudinary = require("cloudinary").v2;
+const { cloudinary } = require("../Middlewares/resumeUpload.js");
 const axios = require("axios");
 
 const dotenv = require("dotenv");
@@ -274,7 +274,7 @@ const addEducation = async (req, res) => {
 const editEducation = async (req, res) => {
   try {
     const { degree, course } = req.body || {};
-    0;
+
     const { id } = req.params;
 
     const { error } = educationSchema.validate(req.body);
@@ -526,44 +526,6 @@ const downloadResume = async (req, res) => {
         message: error.message,
         code: error.code,
       });
-    }
-  }
-};
-
-// View Resume
-const viewResume = async (req, res) => {
-  try {
-    const userId = req.user?._id || req.user?.id;
-    const employee = await Employee.findOne({ authId: userId }).select(
-      "resume -_id",
-    );
-
-    if (!employee || !employee.resume?.url) {
-      return res.status(404).json({ message: "Resume not found" });
-    }
-
-    const response = await axios({
-      method: "GET",
-      url: employee.resume.url,
-      responseType: "arraybuffer",
-      timeout: 60000,
-    });
-
-    const buffer = Buffer.from(response.data);
-    const contentType = response.headers["content-type"] || "application/pdf";
-
-    res.setHeader("Content-Type", contentType);
-    res.setHeader("Content-Length", buffer.length);
-    res.setHeader(
-      "Content-Disposition",
-      `inline; filename="${encodeURIComponent(employee.resume.filename)}"`,
-    );
-
-    res.send(buffer);
-  } catch (error) {
-    console.error("View error:", error.message);
-    if (!res.headersSent) {
-      res.status(500).json({ error: "Failed to view file" });
     }
   }
 };
@@ -1399,7 +1361,6 @@ module.exports = {
   deleteLanguage,
   getResume,
   setResume,
-  viewResume,
   downloadResume,
   deleteResume,
   getAppliedJobs,

@@ -1,7 +1,7 @@
 const express = require("express");
 
 const router = express.Router();
-const resumeUpload = require("../Middlewares/resumeUpload.js");
+const uploadResume = require("../Middlewares/resumeUpload.js");
 
 const {
   getProfile,
@@ -91,10 +91,9 @@ router.put("/language/:id", protect, editLanguage);
 router.delete("/language/:id", protect, deleteLanguage);
 
 // Resume
-router.get("/resume/view", protect, viewResume);
 router.get("/resume/download", protect, downloadResume);
 router.get("/resume", protect, getResume);  // This must come AFTER /resume/view and /resume/download
-router.post("/resume", protect, resumeUpload.single("resume"), setResume);
+router.post("/resume", protect, uploadResume.single("resume"), setResume);
 router.delete("/resume", protect, deleteResume);
 router.get("/applied-jobs", protect, getAppliedJobs);
 
