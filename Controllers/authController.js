@@ -106,6 +106,10 @@ const googleCallBack = async (req, res) => {
   try {
     const user = req.user;
 
+    if (!user) {
+      return res.redirect(`${process.env.CLIENT_URL || 'http://localhost:5173'}/login?error=authentication_failed`);
+    }
+
     const token = jwt.sign(
       {
         user: {
@@ -118,11 +122,17 @@ const googleCallBack = async (req, res) => {
       { expiresIn: "7d" }
     );
 
+    // ✅ FIX: Redirect to correct frontend URL
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const hasRole = user.role ? 'true' : 'false';
+    
     res.redirect(
-      `http://localhost:5173/api/auth/google/callback?token=${token}&isNewUser=${!user.role}`
+      `${frontendUrl}/google/callback?token=${token}&hasRole=${hasRole}`
     );
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error('Google callback error:', err);
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    res.redirect(`${frontendUrl}/login?error=server_error`);
   }
 };
 
@@ -147,7 +157,7 @@ const setRole = async (req, res) => {
       { upsert: true, new: true }
     );
 
-    // 🔁 ISSUE NEW TOKEN WITH UPDATED ROLE
+    // 🔁 Issue new token with updated role
     const token = jwt.sign(
       {
         user: {
