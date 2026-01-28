@@ -37,7 +37,7 @@ const registerUser = async (req, res) => {
       return res.status(400).json({ message: error.details[0].message });
 
     const existingUser = await Auth.findOne({ email });
-    
+
     if (existingUser)
       return res.status(400).json({ message: "Email already registered" });
 
@@ -59,7 +59,7 @@ const registerUser = async (req, res) => {
         },
       },
       process.env.JWT_SECRET,
-      { expiresIn: "7d" }
+      { expiresIn: "7d" },
     );
 
     res.status(201).json({ token });
@@ -93,7 +93,7 @@ const loginUser = async (req, res) => {
         },
       },
       process.env.JWT_SECRET,
-      { expiresIn: "7d" }
+      { expiresIn: "7d" },
     );
 
     res.status(200).json({ token });
@@ -107,7 +107,10 @@ const googleCallBack = async (req, res) => {
     const user = req.user;
 
     if (!user) {
-      return res.redirect(`${process.env.CLIENT_URL || 'http://localhost:5173'}/login?error=authentication_failed`);
+      // ✅ Add # before /login
+      return res.redirect(
+        `https://imharish05.github.io/workwave-frontend/#/login?error=authentication_failed`,
+      );
     }
 
     const token = jwt.sign(
@@ -119,20 +122,21 @@ const googleCallBack = async (req, res) => {
         },
       },
       process.env.JWT_SECRET,
-      { expiresIn: "7d" }
+      { expiresIn: "7d" },
     );
 
-    // ✅ FIX: Redirect to correct frontend URL
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    const hasRole = user.role ? 'true' : 'false';
-    
+    console.log("The redirection");
+
+    // ✅ Add # before /google/callback
     res.redirect(
-      `${frontendUrl}/google/callback?token=${token}&hasRole=${hasRole}`
+      `https://imharish05.github.io/workwave-frontend/#/google/callback?token=${token}&hasRole=${!!user.role}`,
     );
   } catch (err) {
-    console.error('Google callback error:', err);
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    res.redirect(`${frontendUrl}/login?error=server_error`);
+    console.error("Google callback error:", err);
+
+    res.redirect(
+      `https://imharish05.github.io/workwave-frontend/#/login?error=server_error`,
+    );
   }
 };
 
@@ -154,10 +158,9 @@ const setRole = async (req, res) => {
     await Model.findOneAndUpdate(
       { authId: userId },
       { authId: userId },
-      { upsert: true, new: true }
+      { upsert: true, new: true },
     );
 
-    // 🔁 Issue new token with updated role
     const token = jwt.sign(
       {
         user: {
@@ -167,7 +170,7 @@ const setRole = async (req, res) => {
         },
       },
       process.env.JWT_SECRET,
-      { expiresIn: "7d" }
+      { expiresIn: "7d" },
     );
 
     res.status(200).json({ token });
