@@ -107,7 +107,7 @@ const googleCallBack = async (req, res) => {
     const user = req.user;
 
     if (!user) {
-      // ✅ Add # before /login
+      
       return res.redirect(
         `https://imharish05.github.io/workwave-frontend/#/login?error=authentication_failed`,
       );
@@ -125,12 +125,10 @@ const googleCallBack = async (req, res) => {
       { expiresIn: "7d" },
     );
 
-    console.log("The redirection");
-
-    // ✅ Add # before /google/callback
     res.redirect(
       `https://imharish05.github.io/workwave-frontend/#/google/callback?token=${token}&hasRole=${!!user.role}`,
     );
+
   } catch (err) {
     console.error("Google callback error:", err);
 

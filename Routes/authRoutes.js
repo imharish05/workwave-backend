@@ -13,7 +13,6 @@ const {
 const protect = require("../Middlewares/authMiddleware.js");
 
 // Routes
-
 router.post("/register", registerUser);
 router.post("/login", loginUser);
 router.post("/role",protect,setRole)
@@ -23,6 +22,7 @@ router.get(
   "/google",
   passport.authenticate("google", { scope: ["profile", "email"] })
 );
+
 router.get(
   "/google/callback",
   passport.authenticate("google", {session: false,failureRedirect: "/login"}),
