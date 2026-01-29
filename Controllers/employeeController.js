@@ -530,6 +530,82 @@ const downloadResume = async (req, res) => {
   }
 };
 
+const downloadResumeById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({ message: "User ID is required" });
+    }
+
+    console.log("Looking for resume for user ID:", id);
+
+    const employee = await Employee.findOne({ authId: id }).select(
+      "resume -_id",
+    );
+
+    if (!employee || !employee.resume?.url) {
+      console.log("No resume found for user:", id);
+      return res.status(404).json({ message: "Resume not found" });
+    }
+
+    console.log("Found resume URL:", employee.resume.url);
+    console.log("Resume filename:", employee.resume.filename);
+
+    // Fetch from Cloudinary as arraybuffer
+    const response = await axios({
+      method: "GET",
+      url: employee.resume.url,
+      responseType: "arraybuffer",
+      timeout: 60000,
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity,
+      headers: {
+        'Accept': '*/*'
+      }
+    });
+
+    console.log("Downloaded size from Cloudinary:", response.data.byteLength, "bytes");
+
+    const contentType = response.headers["content-type"] || "application/pdf";
+    const filename = employee.resume.filename || "resume.pdf";
+
+    // Set response headers
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${encodeURIComponent(filename)}"`,
+    );
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Length", response.data.byteLength);
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+    
+    console.log("Sending response with size:", response.data.byteLength);
+    
+    // Important: End the response properly
+    res.end(Buffer.from(response.data), 'binary');
+
+  } catch (error) {
+    console.error("\n=== DOWNLOAD ERROR ===");
+    console.error("Error:", error.message);
+    console.error("Stack:", error.stack);
+
+    if (error.response) {
+      console.error("Cloudinary response status:", error.response.status);
+      console.error("Cloudinary response headers:", error.response.headers);
+    }
+
+    if (!res.headersSent) {
+      res.status(500).json({
+        error: "Failed to download file",
+        message: error.message,
+        code: error.code,
+      });
+    }
+  }
+};
+
 // Get Resume metadata
 const getResume = async (req, res) => {
   try {
@@ -1362,6 +1438,7 @@ module.exports = {
   deleteLanguage,
   getResume,
   setResume,
+  downloadResumeById,
   downloadResume,
   deleteResume,
   getAppliedJobs,

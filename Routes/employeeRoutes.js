@@ -34,9 +34,8 @@ const {
 
   getResume,
   setResume,
-  viewResume,
   downloadResume,
-  deleteResume,
+  downloadResumeById,
 
   getSkills,
   getCertificates,
@@ -92,9 +91,9 @@ router.delete("/language/:id", protect, deleteLanguage);
 
 // Resume
 router.get("/resume/download", protect, downloadResume);
-router.get("/resume", protect, getResume);  // This must come AFTER /resume/view and /resume/download
+router.get("/resume/download/:id", protect, downloadResumeById);
+router.get("/resume", protect, getResume);
 router.post("/resume", protect, uploadResume.single("resume"), setResume);
-router.delete("/resume", protect, deleteResume);
 router.get("/applied-jobs", protect, getAppliedJobs);
 
 module.exports = router;
