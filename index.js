@@ -1,6 +1,7 @@
 const express = require("express");
+
 const path = require("path");
-const session = require("express-session");
+
 const dotenv = require("dotenv");
 
 dotenv.config({ path: path.join(__dirname, "config", ".env") });
@@ -8,6 +9,7 @@ dotenv.config({ path: path.join(__dirname, "config", ".env") });
 const cors = require("cors");
 
 const app = express();
+
 const PORT = process.env.PORT || 5000;
 
 const passport = require("./passport.js");
@@ -21,21 +23,18 @@ const employeeRoutes = require("./Routes/employeeRoutes.js");
 const employerRoutes = require("./Routes/employerRoutes.js");
 
 const jobRoutes = require("./Routes/jobRoutes.js");
+const { limiter, authLimiter } = require("./utils/rateLimiter.js");
 
 // Middlewares
-
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-
 app.use(express.json());
 app.use(passport.initialize());
-
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:5174",
   "https://imharish05.github.io",
-  "https://workwave.netlify.app"
+  "https://workwave.netlify.app",
 ];
-
 app.use(
   cors({
     origin: (origin, callback) => {
@@ -46,15 +45,15 @@ app.use(
       }
     },
     credentials: true,
-  })
+  }),
 );
-
-
 // connectdb
 connectDB();
 
 // Routes
-app.use("/api/auth", authRoutes);
+
+app.use("/api/",limiter)
+app.use("/api/auth", authLimiter,authRoutes);
 app.use("/api/employee", employeeRoutes);
 app.use("/api/employer", employerRoutes);
 app.use("/api/job", jobRoutes);

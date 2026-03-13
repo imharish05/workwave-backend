@@ -29,6 +29,7 @@ const protect = async (req, res, next) => {
     if (!user) {
       return res.status(401).json({ message: "User not found" });
     }
+    
     req.user = {
       id: user._id,
       email: user.email,

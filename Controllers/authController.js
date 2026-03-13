@@ -16,17 +16,14 @@ const registerValidation = joi.object({
   email: joi.string().email().required(),
   role: joi.string().optional(),
 });
-
 const loginValidation = joi.object({
   email: joi.string().email().required(),
   password: joi.string().min(6).required(),
   role: joi.string().optional(),
 });
-
 const roleValidation = joi.object({
   role: joi.string().valid("employee", "employer").required(),
 });
-
 const registerUser = async (req, res) => {
   try {
     const { userName, password, email } = req.body;
@@ -67,7 +64,6 @@ const registerUser = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
-
 const loginUser = async (req, res) => {
   try {
     const { error } = loginValidation.validate(req.body);
@@ -81,8 +77,8 @@ const loginUser = async (req, res) => {
       return res.status(401).json({ message: "Invalid email or password" });
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch)
-      return res.status(401).json({ message: "Invalid email or password" });
+
+    if (!isMatch) return res.status(401).json({ message: "Invalid email or password" });
 
     const token = jwt.sign(
       {
@@ -95,7 +91,6 @@ const loginUser = async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: "7d" },
     );
-
     res.status(200).json({ token });
   } catch (err) {
     res.status(500).json({ message: "Internal server error" });

@@ -164,6 +164,7 @@ const updateProfile = async (req, res) => {
     const { userName, phone, location } = req.body;
 
     const { error } = profileSchema.validate(req.body);
+    
     if (error) {
       return res.status(400).json({ message: error.details[0].message });
     }
@@ -350,22 +351,16 @@ const setResume = async (req, res) => {
   try {
     const userId = req.user?._id || req.user?.id;
     if (!userId) {
-      console.error("ERROR: No user ID in request");
       return res.status(401).json({ message: "User not authenticated" });
     }
 
     // Check 2: File in request
     if (!req.file) {
-      console.error("ERROR: No file in request");
-      console.log("req.body:", req.body);
-      console.log("req.files:", req.files);
       return res.status(400).json({ message: "No file uploaded" });
     }
 
     // Check 3: Cloudinary upload result
     if (!req.file.path) {
-      console.error("ERROR: No Cloudinary path in file object");
-      console.log("File object:", JSON.stringify(req.file, null, 2));
       return res.status(500).json({
         message: "Cloudinary upload failed - no path returned",
         details: "File was received but Cloudinary did not return a URL",
@@ -383,7 +378,6 @@ const setResume = async (req, res) => {
     const employee = await Employee.findOne({ authId: userId });
 
     if (!employee) {
-      console.error("ERROR: Employee not found in database");
       return res.status(404).json({ message: "Employee profile not found" });
     }
 
@@ -398,7 +392,7 @@ const setResume = async (req, res) => {
         console.log("✓ Old resume deleted:", deleteResult.result);
       } catch (delError) {
         console.warn("Warning: Could not delete old resume:", delError.message);
-        // Continue anyway - this is not critical
+    
       }
     }
 
@@ -422,8 +416,6 @@ const setResume = async (req, res) => {
       console.error("WARNING: URL test failed:", urlError.message);
       console.log("URL may not be immediately accessible, but continuing...");
     }
-
-    console.log("=== RESUME UPLOAD COMPLETE ===\n");
 
     res.status(200).json({
       filename: employee.resume.filename,
